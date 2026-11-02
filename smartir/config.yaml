@@ -1,0 +1,13 @@
+name: SmartIR files
+version: "1.18.1-1"
+slug: smartir_files
+description: Copies the SmartIR custom integration (1.18.1) into Home Assistant's custom_components folder, then stops.
+url: https://github.com/smartHomeHub/SmartIR
+arch:
+  - amd64
+  - aarch64
+startup: once
+boot: manual
+init: false
+map:
+  - homeassistant_config:rw
