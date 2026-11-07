@@ -1,0 +1,13 @@
+name: User integration files
+version: "1-winix2.0.2-sonoff3.13.3"
+slug: user_integrations
+description: Copies pinned custom integrations (Winix 2.0.2, SonoffLAN 3.13.3) into Home Assistant's custom_components folder, then stops. Folders not installed by this add-on are left untouched.
+url: https://github.com/hyeonk0625/home-server-addons
+arch:
+  - amd64
+  - aarch64
+startup: once
+boot: manual
+init: false
+map:
+  - homeassistant_config:rw
