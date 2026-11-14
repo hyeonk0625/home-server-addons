@@ -1,0 +1,12 @@
+{
+  "domain": "login_relay",
+  "name": "Login relay",
+  "codeowners": [],
+  "config_flow": true,
+  "dependencies": ["http", "websocket_api"],
+  "documentation": "https://github.com/hyeonk0625/home-server-addons",
+  "integration_type": "service",
+  "iot_class": "cloud_polling",
+  "requirements": [],
+  "version": "0.1.0"
+}

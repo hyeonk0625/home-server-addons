@@ -7,6 +7,9 @@ ARG WINIX_COMMIT=9653e5040bc36e9e884f678de25c6324f4042a13
 ARG WINIX_SHA256=5f7efa43f432f4abc75b1c82ca86d2298320929b0b3caf73c6d04dd9ba9dfd4a
 ARG SONOFF_COMMIT=3f329db36477fcc6ebc148db7b35e1187c20097d
 ARG SONOFF_SHA256=08adf7a41e127cfc91f9c17ac73ba28c2351f5e271a08e269b6a99e8bcd26624
+# Our own integration (vendor account login through the seller relay) ships inside this add-on; the marker is the home
+# server commit it was copied from — bump it with config.yaml `version` when the folder changes.
+ARG LOGIN_RELAY_SOURCE=072cbdd363
 
 RUN set -eux; \
     fetch() { \
@@ -21,6 +24,9 @@ RUN set -eux; \
     }; \
     fetch winix iprak/winix "${WINIX_COMMIT}" "${WINIX_SHA256}"; \
     fetch sonoff AlexxIT/SonoffLAN "${SONOFF_COMMIT}" "${SONOFF_SHA256}"
+
+COPY login_relay /opt/integrations/login_relay
+RUN echo "${LOGIN_RELAY_SOURCE}" > /opt/integrations/login_relay/.installed_by_addon
 
 COPY run.sh /run.sh
 RUN chmod a+x /run.sh
