@@ -15,7 +15,7 @@ ARG COWAY_COMMIT=3bf01b888058651efd61c91dbd8752f041c27738
 ARG COWAY_SHA256=6e38760a566ee8cf9e2b87674bb1913df3b15f384ebeda4aa03a4426510b8967
 # Our own integration (vendor account login through the seller relay) ships inside this add-on; the marker is the home
 # server commit it was copied from — bump it with config.yaml `version` when the folder changes.
-ARG LOGIN_RELAY_SOURCE=072cbdd363
+ARG LOGIN_RELAY_SOURCE=6a1699e934
 
 RUN set -eux; \
     fetch() { \

@@ -1,11 +1,18 @@
-"""The three WebSocket commands the home server drives a vendor login with (HAM-261113-68 · 69).
+"""The four WebSocket commands the home server drives a vendor login with (HAM-261113-68 · 69).
 
 * `login_relay/start` `{domain, start_url, reauth_entry_id}` → `{flow_id}` or `{error}` — opens the vendor's flow
   on our implementation (a reauth continues the flow HA already opened for that entry, or opens one), walking its forms
-  (`{}` → `{"implementation": login_relay}`) until the external step, whose URL is the relay start URL given.
+  (`{}` → `{"implementation": login_relay}`) until the external step, whose URL is the relay start URL given. First it
+  aborts the vendor's leftover `user`-source flows an earlier start opened (context `RELAY_CONTEXT_KEY`) — one left
+  half-way holds the vendor's unique id and every new flow would abort `already_in_progress`. A flow a person opened in
+  HA's UI is not touched. When HA ends the flow with an abort, the answer is `{error: flow_failed, reason}` with HA's
+  abort reason (`{error: flow_failed}` alone when the walk broke otherwise).
 * `login_relay/finish` `{flow_id, token}` → `{result: created | reauth_successful, entry_id}` or
   `{result: failed, reason}` — passes the claimed token and walks `external_done` → `creation`.
 * `login_relay/ready` → `{ready}` — true once our provider is registered and failed vendor entries were reloaded.
+* `login_relay/alive` `{flow_id}` → `{alive}` — true while HA holds that flow and it is a relay vendor's flow, whatever
+  its source. HA's `config_entries/flow/progress` leaves out `user`-source flows, which every new login is, so the
+  home server asks here before it claims the relay's one-time token.
 
 Neither answers nor logs carry a token.
 """
@@ -15,12 +22,12 @@ from typing import Any
 
 import voluptuous as vol
 from homeassistant.components import websocket_api
-from homeassistant.config_entries import SOURCE_REAUTH
+from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_USER
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.data_entry_flow import FlowResultType, UnknownFlow
 
 from . import const
-from .const import DOMAIN, MAX_WALK_STEPS
+from .const import DOMAIN, MAX_WALK_STEPS, RELAY_CONTEXT_KEY
 
 PICK_STEP = "pick_implementation"
 
@@ -30,6 +37,7 @@ def register(hass: HomeAssistant) -> None:
     websocket_api.async_register_command(hass, ws_start)
     websocket_api.async_register_command(hass, ws_finish)
     websocket_api.async_register_command(hass, ws_ready)
+    websocket_api.async_register_command(hass, ws_alive)
 
 
 def _state(hass: HomeAssistant):
@@ -41,6 +49,23 @@ def _state(hass: HomeAssistant):
 @callback
 def ws_ready(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
     connection.send_result(msg["id"], {"ready": _state(hass).ready})
+
+
+@websocket_api.websocket_command({vol.Required("type"): f"{DOMAIN}/alive", vol.Required("flow_id"): str})
+@websocket_api.require_admin
+@callback
+def ws_alive(hass: HomeAssistant, connection: websocket_api.ActiveConnection, msg: dict) -> None:
+    connection.send_result(msg["id"], {"alive": alive(hass, msg["flow_id"])})
+
+
+@callback
+def alive(hass: HomeAssistant, flow_id: str) -> bool:
+    """HA holds `flow_id` (any source) and its handler is a relay vendor — not any other integration's flow."""
+    try:
+        flow = hass.config_entries.flow.async_get(flow_id)
+    except UnknownFlow:
+        return False
+    return flow.get("handler") in const.VENDORS
 
 
 @websocket_api.websocket_command({
@@ -73,11 +98,16 @@ async def start(hass: HomeAssistant, domain: str, start_url: str, reauth_entry_i
     if domain not in const.VENDORS:
         return {"error": "unknown_domain"}
     state.pending_starts[domain] = start_url
+    failed: dict[str, str] = {"error": "flow_failed"}
     try:
         result = await _open(hass, domain, reauth_entry_id)
         for _ in range(MAX_WALK_STEPS):
             if result["type"] is FlowResultType.EXTERNAL_STEP:
                 return {"flow_id": result["flow_id"]}
+            if result["type"] is FlowResultType.ABORT:
+                if result.get("reason"):
+                    failed["reason"] = str(result["reason"])
+                break
             if result["type"] is not FlowResultType.FORM:
                 break
             given = {"implementation": DOMAIN} if result["step_id"] == PICK_STEP else {}
@@ -85,14 +115,27 @@ async def start(hass: HomeAssistant, domain: str, start_url: str, reauth_entry_i
     except (UnknownFlow, KeyError, ValueError):
         pass
     state.pending_starts.pop(domain, None)
-    return {"error": "flow_failed"}
+    return failed
+
+
+@callback
+def _abort_our_leftovers(hass: HomeAssistant, domain: str) -> None:
+    """Abort the vendor's `user`-source flows an earlier start opened and nobody finished. Only ours carry
+    `RELAY_CONTEXT_KEY`; a person's flow from HA's UI does not and stays. A flow still running its first step (another
+    start at the same moment) is not listed by HA and is not touched."""
+    for flow in hass.config_entries.flow.async_progress_by_handler(
+            domain, match_context={"source": SOURCE_USER, RELAY_CONTEXT_KEY: True}):
+        hass.config_entries.flow.async_abort(flow["flow_id"])
 
 
 async def _open(hass: HomeAssistant, domain: str, reauth_entry_id: str | None):
     """A new flow, or for a reauth the one HA already has for that entry (one flow per entry — ours left hanging are
-    aborted), else a new reauth flow."""
+    aborted), else a new reauth flow. Our leftover new-login flows are aborted first either way: a `user`-source flow
+    holding the vendor's unique id blocks a reauth's own unique-id check too."""
+    _abort_our_leftovers(hass, domain)
     if reauth_entry_id is None:
-        return await hass.config_entries.flow.async_init(domain, context={"source": "user"})
+        return await hass.config_entries.flow.async_init(domain, context={"source": SOURCE_USER,
+                                                                          RELAY_CONTEXT_KEY: True})
     entry = hass.config_entries.async_get_entry(reauth_entry_id)
     if entry is None or entry.domain != domain:
         raise KeyError(reauth_entry_id)
@@ -103,7 +146,7 @@ async def _open(hass: HomeAssistant, domain: str, reauth_entry_id: str | None):
     if open_ones:
         return await hass.config_entries.flow.async_configure(open_ones[0]["flow_id"])
     return await hass.config_entries.flow.async_init(domain, context={
-        "source": SOURCE_REAUTH, "entry_id": entry.entry_id, "unique_id": entry.unique_id,
+        "source": SOURCE_REAUTH, RELAY_CONTEXT_KEY: True, "entry_id": entry.entry_id, "unique_id": entry.unique_id,
         "title_placeholders": {"name": entry.title}}, data=entry.data)
 
 

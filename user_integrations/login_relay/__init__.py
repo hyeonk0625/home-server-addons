@@ -5,9 +5,10 @@ What it does:
 
 * **provider** — registers itself with `async_add_implementation_provider`, giving each relay vendor (`VENDORS`) one
   `RelayImplementation`. The vendor's integration gets no application credentials.
-* **commands** — the home server drives a login through three WebSocket commands (`commands.py`):
-  `login_relay/start` · `login_relay/finish` · `login_relay/ready`. Whether a flow is still alive is read from HA's own
-  flow list (HA Gate `config_flows_in_progress`), not here.
+* **commands** — the home server drives a login through four WebSocket commands (`commands.py`):
+  `login_relay/start` · `login_relay/finish` · `login_relay/ready` · `login_relay/alive`. Whether a flow is still alive
+  is asked here (`alive`): HA's own flow list (`config_entries/flow/progress`) leaves out `user`-source flows, so a new
+  login's flow is never in it.
 * **start order** — a vendor entry set up before us fails (its implementation is unknown). The moment the provider
   is registered, every vendor entry that names us and is in `SETUP_ERROR` is reloaded; only then is `ready` true.
 

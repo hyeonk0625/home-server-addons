@@ -23,5 +23,10 @@ REFRESH_TIMEOUT_SECONDS = 30
 # The token fields the relay gives (contract §2-2) — nothing else is kept from an answer.
 TOKEN_FIELDS = ("access_token", "refresh_token", "expires_in", "token_type", "scope")
 
+# The flow context key every flow `login_relay/start` opens carries (value True). A later start aborts the leftover
+# `user`-source flows that carry it, so a login the person left half-way does not hold the vendor's one unique id
+# (`already_in_progress`). A flow a person opened in HA's own UI never carries it and is left alone.
+RELAY_CONTEXT_KEY = "login_relay_opened"
+
 # Steps the reauth walk may take before the external step (confirm form → pick implementation → external).
 MAX_WALK_STEPS = 4
