@@ -11,3 +11,6 @@ Home Assistant add-on repository used by the home server installer.
   plus our own `login_relay` (vendor account login through the seller relay), shipped in the add-on folder.
   Runs once and stops; Home Assistant must restart to load them. A folder installed by other means (no `.installed_by_addon`
   marker) is never touched.
+- `mosquitto_acl` — writes the home server's Mosquitto access control list into `/share/<folder>` (`acl.conf` pointing at
+  `accesscontrollist`) for the official Mosquitto add-on's `customize` option. The text comes from this add-on's options, set by the
+  home server. Runs once and stops; Mosquitto must restart to apply it. An empty list is refused.

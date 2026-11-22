@@ -1,0 +1,19 @@
+name: Mosquitto ACL file
+version: "1"
+slug: mosquitto_acl
+description: Writes the home server's Mosquitto access control list (acl.conf and accesscontrollist) into /share/<folder> for the Mosquitto add-on's customize option, then stops.
+url: https://github.com/hyeonk0625/home-server-addons
+arch:
+  - amd64
+  - aarch64
+startup: once
+boot: manual
+init: false
+map:
+  - share:rw
+options:
+  folder: mosquitto
+  acl: ""
+schema:
+  folder: "match(^[a-z0-9_]{1,32}$)"
+  acl: str
